@@ -2,7 +2,9 @@ import { useState } from "react";
 import axios from "axios";
 import "./PromptBar.css";
 
-const API = "http://localhost:8000";
+const API = import.meta.env.DEV
+  ? "http://localhost:8000"
+  : `${window.location.protocol}//${window.location.hostname}:8000`;
 
 export default function PromptBar({ onAdd, setLoading, loading }) {
   const [value, setValue] = useState("");

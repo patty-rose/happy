@@ -6,29 +6,40 @@ import {
 } from "recharts";
 import "./Widget.css";
 
-const API = "http://localhost:8000";
+const API = import.meta.env.DEV
+  ? "http://localhost:8000"
+  : `${window.location.protocol}//${window.location.hostname}:8000`;
 
 export default function Widget({ config, onRemove }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (config.source === "fred" && config.series_id) {
-      axios.get(`${API}/data/fred/${config.series_id}`)
+    if (config.source === "bls" && config.series_id) {
+      axios.get(`${API}/data/bls/${config.series_id}`)
         .then((r) => setData(r.data.data))
-        .catch(() => setError("Failed to load data"));
+        .catch(() => setError("Failed to load BLS data"));
+    } else if (config.source === "portland" && config.dataset_id) {
+      axios.get(`${API}/data/portland/${config.dataset_id}`)
+        .then((r) => setData(r.data.data))
+        .catch(() => setError("Failed to load Portland data"));
     }
-  }, [config.series_id, config.source]);
-
-  const formatDate = (d) => {
-    const dt = new Date(d);
-    return `${dt.getFullYear()} Q${Math.floor(dt.getMonth() / 3) + 1}`;
-  };
+  }, [config.series_id, config.dataset_id, config.source]);
 
   const renderChart = () => {
     if (error) return <div className="widget-error">{error}</div>;
     if (!data) return <div className="widget-loading">Loading...</div>;
     if (data.length === 0) return <div className="widget-error">No data</div>;
+
+    // Portland Open Data returns raw rows — show a simple count/table stub
+    if (config.source === "portland") {
+      return (
+        <div className="widget-table">
+          <div className="table-count">{data.length} records loaded</div>
+          <div className="table-note">Table view coming soon</div>
+        </div>
+      );
+    }
 
     if (config.type === "stat") {
       const latest = data[data.length - 1];
