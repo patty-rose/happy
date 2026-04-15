@@ -7,20 +7,31 @@ import "./App.css";
 
 const COLS = 12;
 const ROW_HEIGHT = 80;
+const WIDGET_W = 4;
+const WIDGET_H = 4;
 
 export default function App() {
   const [widgets, setWidgets] = useState([]);
   const [layout, setLayout] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const addWidget = (config) => {
-    const id = `widget-${Date.now()}`;
-    const col = (widgets.length * 4) % COLS;
-    setWidgets((prev) => [...prev, { id, ...config }]);
-    setLayout((prev) => [
-      ...prev,
-      { i: id, x: col, y: Infinity, w: 4, h: 4, minW: 3, minH: 3 },
-    ]);
+  const addMany = (configs) => {
+    const now = Date.now();
+    const newWidgets = configs.map((config, i) => ({
+      id: `widget-${now}-${i}`,
+      ...config,
+    }));
+    const newLayout = newWidgets.map((w, i) => ({
+      i: w.id,
+      x: (i * WIDGET_W) % COLS,
+      y: Infinity,
+      w: WIDGET_W,
+      h: WIDGET_H,
+      minW: 3,
+      minH: 3,
+    }));
+    setWidgets((prev) => [...prev, ...newWidgets]);
+    setLayout((prev) => [...prev, ...newLayout]);
   };
 
   const removeWidget = (id) => {
@@ -35,15 +46,17 @@ export default function App() {
         <div className="subtitle">Portland Policy Dashboard</div>
       </header>
 
-      <PromptBar onAdd={addWidget} setLoading={setLoading} loading={loading} />
+      <PromptBar onAddMany={addMany} setLoading={setLoading} loading={loading} />
 
       {widgets.length === 0 && !loading && (
         <div className="empty-state">
-          <p>Ask anything about Portland — e.g.<br />
-            <em>"Show me Oregon unemployment over the last two years"</em>
+          <p>Ask about any Portland policy topic and get a set of relevant data widgets.<br />
+            <em>"Show me data about vacant lots in downtown Portland"</em>
           </p>
         </div>
       )}
+
+      {loading && <div className="loading-bar">Selecting relevant datasets...</div>}
 
       <GridLayout
         className="grid"

@@ -10,19 +10,20 @@ test('app loads without console errors', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('prompt bar submits and renders a widget', async ({ page }) => {
+test('query returns multiple widgets', async ({ page }) => {
   const errors = [];
   page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
   page.on('pageerror', err => errors.push(err.message));
 
   await page.goto('/');
-  await page.fill('.prompt-input', 'Oregon unemployment rate');
+  await page.fill('.prompt-input', 'Show me data about vacant lots in downtown Portland');
   await page.click('.prompt-btn');
 
-  // Wait for widget to appear (claude CLI + BLS fetch can take a few seconds)
-  await expect(page.locator('.widget')).toBeVisible({ timeout: 30000 });
-  await expect(page.locator('.widget-title')).not.toBeEmpty();
+  // Wait for at least 2 widgets (multi-widget response)
+  await expect(page.locator('.widget').first()).toBeVisible({ timeout: 45000 });
+  const count = await page.locator('.widget').count();
+  expect(count).toBeGreaterThanOrEqual(2);
+  await expect(page.locator('.widget').first().locator('.widget-title')).not.toBeEmpty();
 
-  // No JS errors during the flow
   expect(errors).toEqual([]);
 });

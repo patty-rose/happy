@@ -4,7 +4,7 @@ import "./PromptBar.css";
 
 const API = "/api";
 
-export default function PromptBar({ onAdd, setLoading, loading }) {
+export default function PromptBar({ onAddMany, setLoading, loading }) {
   const [value, setValue] = useState("");
   const [error, setError] = useState(null);
 
@@ -15,7 +15,7 @@ export default function PromptBar({ onAdd, setLoading, loading }) {
     setLoading(true);
     try {
       const { data } = await axios.post(`${API}/query`, { prompt: value });
-      onAdd(data);
+      onAddMany(Array.isArray(data) ? data : [data]);
       setValue("");
     } catch (err) {
       setError(err.response?.data?.detail ?? "Something went wrong");
@@ -29,13 +29,13 @@ export default function PromptBar({ onAdd, setLoading, loading }) {
       <form className="prompt-bar" onSubmit={submit}>
         <input
           className="prompt-input"
-          placeholder="Ask about Portland data — unemployment, housing, transit..."
+          placeholder='e.g. "Show me data about vacant lots in downtown Portland"'
           value={value}
           onChange={(e) => setValue(e.target.value)}
           disabled={loading}
         />
         <button className="prompt-btn" type="submit" disabled={loading || !value.trim()}>
-          {loading ? "..." : "Add widget"}
+          {loading ? "Thinking..." : "Show me"}
         </button>
       </form>
       {error && <div className="prompt-error">{error}</div>}

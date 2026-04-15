@@ -39,6 +39,19 @@
   font-weight: 500;
 }
 
+.loading-bar {
+  text-align: center;
+  padding: 32px;
+  color: #7c3aed;
+  font-size: 14px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 .grid {
   padding: 24px;
 }

@@ -18,7 +18,8 @@ export default function Widget({ config, onRemove }) {
         .then((r) => setData(r.data.data))
         .catch(() => setError("Failed to load BLS data"));
     } else if (config.source === "portland" && config.dataset_id) {
-      axios.get(`${API}/data/portland/${config.dataset_id}`)
+      const yf = config.year_field || "YEAR_";
+      axios.get(`${API}/data/portland/${config.dataset_id}?year_field=${yf}`)
         .then((r) => setData(r.data.data))
         .catch(() => setError("Failed to load Portland data"));
     }
@@ -28,16 +29,6 @@ export default function Widget({ config, onRemove }) {
     if (error) return <div className="widget-error">{error}</div>;
     if (!data) return <div className="widget-loading">Loading...</div>;
     if (data.length === 0) return <div className="widget-error">No data</div>;
-
-    // Portland Open Data returns raw rows — show a simple count/table stub
-    if (config.source === "portland") {
-      return (
-        <div className="widget-table">
-          <div className="table-count">{data.length} records loaded</div>
-          <div className="table-note">Table view coming soon</div>
-        </div>
-      );
-    }
 
     if (config.type === "stat") {
       const latest = data[data.length - 1];
