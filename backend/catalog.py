@@ -80,3 +80,10 @@ CATALOG_TEXT = "\n".join(
     f'(topics: {", ".join(e["topics"])}; chart types: {", ".join(e["chart_types"])})'
     for e in CATALOG
 )
+
+# Authoritative year_field lookup — never rely on Claude for this
+CATALOG_YEAR_FIELD: dict[str, str] = {
+    e["id"]: e.get("year_field", "YEAR_")
+    for e in CATALOG
+    if e["source"] == "portland"
+}

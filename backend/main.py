@@ -2,13 +2,15 @@ import json
 import os
 import re
 import subprocess
+import urllib.parse
 import httpx
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from catalog import CATALOG_TEXT
+from catalog import CATALOG_TEXT, CATALOG_YEAR_FIELD
 
 load_dotenv()
 
@@ -26,20 +28,23 @@ PORTLAND_BASE = "https://www.portlandmaps.com/od/rest/services"
 
 SYSTEM_PROMPT = f"""You are a civic data assistant for a Portland, Oregon policy dashboard.
 
-Given a user question, select the most relevant datasets from the catalog below and return a JSON array of widget configs — one object per dataset you want to show. Be creative and thorough: a good question deserves 2-4 widgets that together tell a complete story. Do NOT analyze or editorialize — just select and present the data.
+Given a user question, select the most relevant datasets from the catalog and return a JSON object with two keys:
 
-Return ONLY a raw JSON array, no markdown, no explanation. Each element:
+1. "reasoning": 2-3 sentences explaining which metrics you chose and why they're the most meaningful signal for this question. Be specific about what each metric reveals.
+2. "widgets": array of 2-4 widget config objects.
+
+Each widget object:
 {{
   "title": "Short widget title",
   "type": "line" | "bar" | "stat",
   "source": "bls" | "portland",
   "series_id": "<BLS series id if source=bls, else null>",
   "dataset_id": "<ArcGIS service path if source=portland, e.g. COP_OpenData_PlanningDevelopment/MapServer/89, else null>",
-  "year_field": "<year field name for portland datasets, from catalog — default YEAR_>",
-  "description": "One sentence on what this data shows and why it's relevant to the question"
+  "description": "One sentence on what this specific chart reveals about the question"
 }}
 
-Choose "stat" for a single current-value callout, "line" for trends over time, "bar" for comparisons.
+Return ONLY a raw JSON object, no markdown, no extra text.
+Choose "stat" for a single current-value callout, "line" for trends over time, "bar" for discrete yearly comparisons.
 
 AVAILABLE DATA CATALOG:
 {CATALOG_TEXT}
@@ -57,19 +62,22 @@ class WidgetConfig(BaseModel):
     series_id: str | None
     dataset_id: str | None
     description: str
-    year_field: str | None = "YEAR_"  # ArcGIS year field; overridden per-dataset as needed
+    year_field: str | None = "YEAR_"
 
 
-def parse_claude_json(raw: str) -> list:
-    """Strip markdown fences and parse JSON from claude CLI output."""
+class QueryResponse(BaseModel):
+    reasoning: str
+    widgets: list[WidgetConfig]
+
+
+def parse_claude_json(raw: str) -> dict:
     text = raw.strip()
-    # Remove ```json ... ``` or ``` ... ``` fences
     text = re.sub(r"^```[a-z]*\n?", "", text)
     text = re.sub(r"\n?```$", "", text)
     return json.loads(text.strip())
 
 
-@app.post("/query", response_model=list[WidgetConfig])
+@app.post("/query", response_model=QueryResponse)
 def query(req: QueryRequest):
     full_prompt = f"{SYSTEM_PROMPT}\n\nUser question: {req.prompt}"
     result = subprocess.run(
@@ -81,11 +89,16 @@ def query(req: QueryRequest):
     if result.returncode != 0:
         raise HTTPException(status_code=500, detail=f"claude CLI error: {result.stderr}")
     try:
-        configs = parse_claude_json(result.stdout)
-        if not isinstance(configs, list):
-            configs = [configs]
-        return configs
-    except (json.JSONDecodeError, Exception) as e:
+        parsed = parse_claude_json(result.stdout)
+        # If Claude returned a bare list instead of {reasoning, widgets}, wrap it
+        if isinstance(parsed, list):
+            parsed = {"reasoning": "", "widgets": parsed}
+        # Enforce year_field from catalog — never trust Claude's value for this
+        for w in parsed.get("widgets", []):
+            if w.get("source") == "portland" and w.get("dataset_id"):
+                w["year_field"] = CATALOG_YEAR_FIELD.get(w["dataset_id"], "YEAR_")
+        return parsed
+    except Exception:
         raise HTTPException(status_code=500, detail=f"Could not parse claude response: {result.stdout}")
 
 
@@ -118,20 +131,13 @@ async def bls_data(series_id: str):
     return {"data": data}
 
 
+TIMESTAMP_FIELDS = {"ISSUED", "CREATEDATE", "INDATE"}
+
+
 @app.get("/data/portland/{service_path:path}")
 async def portland_data(service_path: str, year_field: str = "YEAR_", since_year: int = 2005):
-    """Query a Portland ArcGIS MapServer layer, returning counts aggregated by year.
-
-    If year_field is a timestamp field (ISSUED), we fetch raw records and aggregate
-    on the backend. Otherwise we use ArcGIS statistics groupBy.
-    """
-    import urllib.parse
-    from datetime import datetime, timezone
-
-    TIMESTAMP_FIELDS = {"ISSUED", "CREATEDATE", "INDATE"}
-
+    """Return permit/record counts aggregated by year from a Portland ArcGIS layer."""
     if year_field in TIMESTAMP_FIELDS:
-        # Paginate (max 200/request) and aggregate counts by year in Python
         where = urllib.parse.quote(f"{year_field} >= DATE '{since_year}-01-01'")
         counts: dict[int, int] = {}
         offset = 0
@@ -141,9 +147,7 @@ async def portland_data(service_path: str, year_field: str = "YEAR_", since_year
                     f"{PORTLAND_BASE}/{service_path}/query"
                     f"?where={where}"
                     f"&outFields={year_field}"
-                    f"&resultRecordCount=200"
-                    f"&resultOffset={offset}"
-                    f"&f=json"
+                    f"&resultRecordCount=200&resultOffset={offset}&f=json"
                 )
                 resp = await client.get(url, timeout=15)
                 if resp.status_code != 200:
@@ -168,8 +172,7 @@ async def portland_data(service_path: str, year_field: str = "YEAR_", since_year
             f"?where={urllib.parse.quote(f'{year_field}>={since_year}')}"
             f"&outStatistics={stats}"
             f"&groupByFieldsForStatistics={year_field}"
-            f"&orderByFields={year_field}+ASC"
-            f"&f=json"
+            f"&orderByFields={year_field}+ASC&f=json"
         )
         async with httpx.AsyncClient() as client:
             resp = await client.get(url, timeout=15)

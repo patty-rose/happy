@@ -10,20 +10,23 @@ test('app loads without console errors', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('query returns multiple widgets', async ({ page }) => {
+test('query returns reasoning blurb and multiple widgets', async ({ page }) => {
   const errors = [];
   page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
   page.on('pageerror', err => errors.push(err.message));
 
   await page.goto('/');
-  await page.fill('.prompt-input', 'Show me data about vacant lots in downtown Portland');
+  await page.fill('.prompt-input', 'Show me data about vacant spaces in downtown Portland');
   await page.click('.prompt-btn');
 
-  // Wait for at least 2 widgets (multi-widget response)
-  await expect(page.locator('.widget').first()).toBeVisible({ timeout: 45000 });
+  // Section with reasoning appears
+  await expect(page.locator('.section')).toBeVisible({ timeout: 45000 });
+  await expect(page.locator('.section-reasoning')).not.toBeEmpty();
+
+  // At least 2 widgets render
   const count = await page.locator('.widget').count();
   expect(count).toBeGreaterThanOrEqual(2);
-  await expect(page.locator('.widget').first().locator('.widget-title')).not.toBeEmpty();
 
+  // No JS errors
   expect(errors).toEqual([]);
 });

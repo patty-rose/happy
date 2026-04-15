@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import {
   LineChart, Line, BarChart, Bar,
@@ -11,23 +11,36 @@ const API = "/api";
 export default function Widget({ config, onRemove }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const bodyRef = useRef(null);
+  const [bodySize, setBodySize] = useState({ w: 0, h: 0 });
+
+  // Measure container so Recharts never sees 0x0
+  useEffect(() => {
+    if (!bodyRef.current) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) setBodySize({ w: width, h: height });
+    });
+    observer.observe(bodyRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (config.source === "bls" && config.series_id) {
       axios.get(`${API}/data/bls/${config.series_id}`)
         .then((r) => setData(r.data.data))
-        .catch(() => setError("Failed to load BLS data"));
+        .catch(() => setError("Failed to load data"));
     } else if (config.source === "portland" && config.dataset_id) {
       const yf = config.year_field || "YEAR_";
       axios.get(`${API}/data/portland/${config.dataset_id}?year_field=${yf}`)
         .then((r) => setData(r.data.data))
-        .catch(() => setError("Failed to load Portland data"));
+        .catch(() => setError("Failed to load data"));
     }
-  }, [config.series_id, config.dataset_id, config.source]);
+  }, [config.series_id, config.dataset_id, config.source, config.year_field]);
 
   const renderChart = () => {
     if (error) return <div className="widget-error">{error}</div>;
-    if (!data) return <div className="widget-loading">Loading...</div>;
+    if (!data || bodySize.h === 0) return <div className="widget-loading">Loading...</div>;
     if (data.length === 0) return <div className="widget-error">No data</div>;
 
     if (config.type === "stat") {
@@ -62,8 +75,7 @@ export default function Widget({ config, onRemove }) {
         dataKey="date"
         tickFormatter={(d) => new Date(d).getFullYear()}
         tick={{ fontSize: 11, fill: "#64748b" }}
-        axisLine={false}
-        tickLine={false}
+        axisLine={false} tickLine={false}
         interval="preserveStartEnd"
       />
     );
@@ -71,8 +83,7 @@ export default function Widget({ config, onRemove }) {
       <YAxis
         tickFormatter={tickFormatter}
         tick={{ fontSize: 11, fill: "#64748b" }}
-        axisLine={false}
-        tickLine={false}
+        axisLine={false} tickLine={false}
         width={48}
       />
     );
@@ -87,7 +98,7 @@ export default function Widget({ config, onRemove }) {
 
     if (config.type === "bar") {
       return (
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height={bodySize.h}>
           <BarChart {...commonProps}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e2130" />
             {xAxis}{yAxis}{tooltip}
@@ -98,7 +109,7 @@ export default function Widget({ config, onRemove }) {
     }
 
     return (
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height={bodySize.h}>
         <LineChart {...commonProps}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1e2130" />
           {xAxis}{yAxis}{tooltip}
@@ -124,7 +135,7 @@ export default function Widget({ config, onRemove }) {
       {config.description && (
         <div className="widget-description">{config.description}</div>
       )}
-      <div className="widget-body">{renderChart()}</div>
+      <div className="widget-body" ref={bodyRef}>{renderChart()}</div>
     </div>
   );
 }

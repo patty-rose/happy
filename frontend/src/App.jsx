@@ -1,42 +1,27 @@
 import { useState } from "react";
-import GridLayout from "react-grid-layout";
-import "react-grid-layout/css/styles.css";
 import PromptBar from "./components/PromptBar";
 import Widget from "./components/Widget";
 import "./App.css";
 
-const COLS = 12;
-const ROW_HEIGHT = 80;
-const WIDGET_W = 4;
-const WIDGET_H = 4;
-
 export default function App() {
-  const [widgets, setWidgets] = useState([]);
-  const [layout, setLayout] = useState([]);
+  const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const addMany = (configs) => {
-    const now = Date.now();
-    const newWidgets = configs.map((config, i) => ({
-      id: `widget-${now}-${i}`,
-      ...config,
-    }));
-    const newLayout = newWidgets.map((w, i) => ({
-      i: w.id,
-      x: (i * WIDGET_W) % COLS,
-      y: Infinity,
-      w: WIDGET_W,
-      h: WIDGET_H,
-      minW: 3,
-      minH: 3,
-    }));
-    setWidgets((prev) => [...prev, ...newWidgets]);
-    setLayout((prev) => [...prev, ...newLayout]);
+  const addSection = ({ query, reasoning, widgets }) => {
+    const id = `section-${Date.now()}`;
+    setSections((prev) => [...prev, { id, query, reasoning, widgets }]);
   };
 
-  const removeWidget = (id) => {
-    setWidgets((prev) => prev.filter((w) => w.id !== id));
-    setLayout((prev) => prev.filter((l) => l.i !== id));
+  const removeWidget = (sectionId, widgetId) => {
+    setSections((prev) =>
+      prev
+        .map((s) =>
+          s.id === sectionId
+            ? { ...s, widgets: s.widgets.filter((w) => w.id !== widgetId) }
+            : s
+        )
+        .filter((s) => s.widgets.length > 0)
+    );
   };
 
   return (
@@ -46,33 +31,39 @@ export default function App() {
         <div className="subtitle">Portland Policy Dashboard</div>
       </header>
 
-      <PromptBar onAddMany={addMany} setLoading={setLoading} loading={loading} />
+      <PromptBar onAdd={addSection} setLoading={setLoading} loading={loading} />
 
-      {widgets.length === 0 && !loading && (
+      {sections.length === 0 && !loading && (
         <div className="empty-state">
-          <p>Ask about any Portland policy topic and get a set of relevant data widgets.<br />
-            <em>"Show me data about vacant lots in downtown Portland"</em>
+          <p>Ask about any Portland policy topic and get a curated set of relevant data.<br />
+            <em>"Show me data about vacant spaces in downtown Portland"</em>
           </p>
         </div>
       )}
 
       {loading && <div className="loading-bar">Selecting relevant datasets...</div>}
 
-      <GridLayout
-        className="grid"
-        layout={layout}
-        cols={COLS}
-        rowHeight={ROW_HEIGHT}
-        width={window.innerWidth - 48}
-        onLayoutChange={setLayout}
-        draggableHandle=".widget-drag-handle"
-      >
-        {widgets.map((w) => (
-          <div key={w.id}>
-            <Widget config={w} onRemove={() => removeWidget(w.id)} />
+      <div className="sections">
+        {sections.map((section) => (
+          <div key={section.id} className="section">
+            <div className="section-header">
+              <div className="section-query">"{section.query}"</div>
+              {section.reasoning && (
+                <div className="section-reasoning">{section.reasoning}</div>
+              )}
+            </div>
+            <div className="widget-grid">
+              {section.widgets.map((w) => (
+                <Widget
+                  key={w.id}
+                  config={w}
+                  onRemove={() => removeWidget(section.id, w.id)}
+                />
+              ))}
+            </div>
           </div>
         ))}
-      </GridLayout>
+      </div>
     </div>
   );
 }
