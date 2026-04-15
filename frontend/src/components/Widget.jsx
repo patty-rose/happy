@@ -6,9 +6,7 @@ import {
 } from "recharts";
 import "./Widget.css";
 
-const API = window.location.hostname === "localhost"
-  ? "http://localhost:8000"
-  : `${window.location.protocol}//${window.location.hostname}:8000`;
+const API = "/api";
 
 export default function Widget({ config, onRemove }) {
   const [data, setData] = useState(null);

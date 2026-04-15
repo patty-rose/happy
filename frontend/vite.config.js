@@ -6,5 +6,12 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     allowedHosts: ['happyy.exe.xyz'],
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
   },
 })
