@@ -1,7 +1,6 @@
 import { useState } from "react";
 import GridLayout from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
-import "react-grid-layout/css/resizable.css";
 import PromptBar from "./components/PromptBar";
 import Widget from "./components/Widget";
 import "./App.css";
