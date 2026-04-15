@@ -1,0 +1,99 @@
+.widget {
+  background: #1a1d2e;
+  border: 1px solid #2e3347;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.widget-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 6px;
+  cursor: grab;
+  user-select: none;
+}
+
+.widget-header:active {
+  cursor: grabbing;
+}
+
+.widget-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.widget-description {
+  padding: 0 12px 6px;
+  font-size: 11px;
+  color: #475569;
+  line-height: 1.4;
+}
+
+.widget-remove {
+  background: none;
+  border: none;
+  color: #475569;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.widget-remove:hover {
+  color: #f87171;
+}
+
+.widget-body {
+  flex: 1;
+  padding: 4px 8px 10px;
+  min-height: 0;
+}
+
+.widget-loading,
+.widget-error {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: #475569;
+}
+
+.widget-error {
+  color: #f87171;
+}
+
+.widget-stat {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.stat-value {
+  font-size: 36px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.stat-delta {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.stat-delta.up { color: #34d399; }
+.stat-delta.down { color: #f87171; }
+
+.stat-date {
+  font-size: 12px;
+  color: #475569;
+}

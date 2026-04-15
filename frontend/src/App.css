@@ -1,0 +1,44 @@
+.app {
+  min-height: 100vh;
+  background: #0f1117;
+  color: #e2e8f0;
+  font-family: system-ui, sans-serif;
+}
+
+.app-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 20px 24px 8px;
+  border-bottom: 1px solid #1e2130;
+}
+
+.logo {
+  font-size: 22px;
+  font-weight: 700;
+  color: #7c3aed;
+  letter-spacing: -0.5px;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 80px 24px;
+  color: #475569;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.empty-state em {
+  color: #64748b;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.grid {
+  padding: 24px;
+}
