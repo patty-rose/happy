@@ -1,9 +1,13 @@
 import json
+import os
 import subprocess
 import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -15,7 +19,7 @@ app.add_middleware(
 )
 
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
-FRED_API_KEY = "annualreviews"  # public demo key
+FRED_API_KEY = os.getenv("FRED_API_KEY", "")
 
 SYSTEM_PROMPT = """You are a civic data assistant for a Portland, Oregon policy dashboard.
 Given a natural language query, respond with ONLY a JSON object (no markdown, no explanation) with this shape:
