@@ -1,0 +1,51 @@
+{
+  "sections": [
+    {
+      "id": "section-1776295034108",
+      "query": "Portland unemployment trends",
+      "reasoning": "To tell a complete story about Portland unemployment trends, I selected the Portland Metro unemployment rate as the primary signal, Oregon's statewide rate for regional context, and the US national rate for macro comparison. Together these three metrics reveal whether Portland's labor market is tracking with broader trends or diverging\u2014which is key for policy decisions around workforce development and economic intervention.",
+      "widgets": [
+        {
+          "id": "widget-1776295034108-0",
+          "title": "Portland Metro Unemployment Rate",
+          "type": "line",
+          "source": "bls",
+          "series_id": "LAUMT412638000000003",
+          "dataset_id": null,
+          "description": "Monthly unemployment rate for the Portland-Vancouver-Hillsboro metro, the most direct measure of local labor market health over time.",
+          "year_field": "YEAR_"
+        },
+        {
+          "id": "widget-1776295034108-1",
+          "title": "Oregon Unemployment Rate",
+          "type": "line",
+          "source": "bls",
+          "series_id": "LASST410000000000003",
+          "dataset_id": null,
+          "description": "Statewide unemployment rate providing regional context to assess whether Portland's trends mirror or diverge from Oregon as a whole.",
+          "year_field": "YEAR_"
+        },
+        {
+          "id": "widget-1776295034108-2",
+          "title": "US Unemployment Rate",
+          "type": "line",
+          "source": "worldbank",
+          "series_id": "SL.UEM.TOTL.ZS",
+          "dataset_id": null,
+          "description": "National unemployment rate as a macro benchmark to identify whether Portland's labor challenges are local or part of broader national cycles.",
+          "year_field": "YEAR_"
+        },
+        {
+          "id": "widget-1776295034108-3",
+          "title": "Portland Metro Current Unemployment",
+          "type": "stat",
+          "source": "bls",
+          "series_id": "LAUMT412638000000003",
+          "dataset_id": null,
+          "description": "Latest single-value snapshot of Portland Metro unemployment rate for at-a-glance policy reference.",
+          "year_field": "YEAR_"
+        }
+      ]
+    }
+  ]
+}

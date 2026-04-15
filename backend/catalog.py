@@ -1,16 +1,19 @@
-# Data catalog — describes every available series/dataset so Claude can reason about relevance.
-# source: "bls" uses /data/bls/{series_id}
-# source: "portland" uses /data/portland/{service_layer} (ArcGIS MapServer layer)
+# Data catalog — describes every available series/dataset.
+# source: "bls"       → /data/bls/{id}
+# source: "worldbank" → /data/worldbank/{id}
+# source: "portland"  → /data/portland/{id}  (year-aggregated ArcGIS)
+# source: "portland_count" → /data/portland_count/{id}  (static count stat)
 
 CATALOG = [
-    # ── BLS Labor Data ────────────────────────────────────────────────────────
+    # ── BLS Labor Data (Oregon / Portland-Metro) ──────────────────────────────
+    # Note: BLS v1 API (no key) rate-limits at ~10 req/day per IP.
     {
         "id": "LASST410000000000003",
         "source": "bls",
         "chart_types": ["line", "stat"],
         "title": "Oregon Unemployment Rate",
-        "description": "Monthly unemployment rate (%) for Oregon. Reflects share of labor force actively seeking work.",
-        "topics": ["unemployment", "jobs", "labor", "economy", "workforce", "recession"],
+        "description": "Monthly unemployment rate (%) for Oregon.",
+        "topics": ["unemployment", "jobs", "labor", "economy", "workforce"],
     },
     {
         "id": "LAUMT412638000000003",
@@ -25,7 +28,7 @@ CATALOG = [
         "source": "bls",
         "chart_types": ["line", "bar"],
         "title": "Oregon Total Nonfarm Employment",
-        "description": "Total nonfarm payroll employment in Oregon (thousands). Broad measure of job market health.",
+        "description": "Total nonfarm payroll employment in Oregon (thousands).",
         "topics": ["employment", "jobs", "economy", "payroll", "workforce"],
     },
     {
@@ -53,25 +56,98 @@ CATALOG = [
         "topics": ["employment", "jobs", "portland", "metro", "workforce", "economy"],
     },
 
-    # ── Portland Open Data (ArcGIS / portlandmaps.com) ────────────────────────
-    # These return counts aggregated by year, suitable for bar/line charts.
+    # ── World Bank (US national context, no API key required) ─────────────────
+    {
+        "id": "FP.CPI.TOTL.ZG",
+        "source": "worldbank",
+        "chart_types": ["line"],
+        "title": "US Inflation Rate (CPI, Annual %)",
+        "description": "Annual US consumer price inflation. Context for Portland cost-of-living, rent pressures, and real estate investment appetite.",
+        "topics": ["inflation", "cost of living", "housing", "affordability", "economy", "rent"],
+    },
+    {
+        "id": "NY.GDP.PCAP.KD.ZG",
+        "source": "worldbank",
+        "chart_types": ["line"],
+        "title": "US GDP Per Capita Growth (Annual %)",
+        "description": "Annual real GDP per capita growth for the US. Macro-economic context for investment and development cycles.",
+        "topics": ["gdp", "economy", "growth", "recession", "investment", "development"],
+    },
+    {
+        "id": "SL.UEM.TOTL.ZS",
+        "source": "worldbank",
+        "chart_types": ["line", "stat"],
+        "title": "US Unemployment Rate (National)",
+        "description": "National unemployment rate (% of labor force, ILO estimate). Compare against Portland-Metro for local context.",
+        "topics": ["unemployment", "jobs", "labor", "national", "economy", "workforce"],
+    },
+    {
+        "id": "SP.URB.TOTL.IN.ZS",
+        "source": "worldbank",
+        "chart_types": ["line"],
+        "title": "US Urban Population (%)",
+        "description": "Share of US population living in urban areas. Context for urbanization trends driving Portland's density and housing demand.",
+        "topics": ["urbanization", "population", "density", "housing", "growth"],
+    },
+    {
+        "id": "EN.URB.LCTY.UR.ZS",
+        "source": "worldbank",
+        "chart_types": ["line"],
+        "title": "US Population in Largest City (%)",
+        "description": "Share of urban population in the country's largest city. Indicator of urban concentration trends.",
+        "topics": ["urbanization", "population", "city", "concentration"],
+    },
+
+    # ── Portland Open Data — year-aggregated ArcGIS layers ────────────────────
     {
         "id": "COP_OpenData_PlanningDevelopment/MapServer/89",
         "source": "portland",
         "chart_types": ["bar", "line"],
         "title": "Portland Residential Building Permits (by Year)",
-        "description": "Count of residential building permits issued per year in Portland. Proxy for housing construction activity and development interest.",
-        "topics": ["building", "permits", "construction", "development", "housing", "vacancies", "downtown", "zoning", "residential"],
+        "description": "Count of residential building permits issued per year. Proxy for housing construction and development interest.",
+        "topics": ["building", "permits", "construction", "development", "housing", "vacancies", "zoning", "residential"],
+        "year_field": "YEAR_",
     },
     {
         "id": "COP_OpenData_PlanningDevelopment/MapServer/126",
         "source": "portland",
         "chart_types": ["bar", "line"],
         "title": "Portland Residential Demolitions (by Year)",
-        "description": "Count of residential demolition permits issued per year. Indicates teardown/redevelopment activity and potential vacancy creation.",
-        "topics": ["demolition", "teardown", "redevelopment", "vacancies", "housing", "construction", "permits"],
-        "year_field": "ISSUED",  # epoch ms timestamp — backend converts to year
-        "since_year": 2005,
+        "description": "Count of residential demolition permits per year. Indicates teardown/redevelopment churn and potential vacancy creation.",
+        "topics": ["demolition", "teardown", "redevelopment", "vacancies", "housing", "construction"],
+        "year_field": "ISSUED",
+    },
+    {
+        "id": "COP_OpenData_CityProjects/MapServer/43",
+        "source": "portland",
+        "chart_types": ["bar"],
+        "title": "Portland Capital Improvement Projects (by Start Year)",
+        "description": "Count of city capital improvement projects by construction start year. Tracks public investment in Portland infrastructure.",
+        "topics": ["capital", "investment", "infrastructure", "city projects", "construction", "public spending", "development"],
+        "year_field": "Est_Construction_Start_Date",
+    },
+
+    # ── Portland Open Data — static count stats ────────────────────────────────
+    {
+        "id": "COP_OpenData_Property/MapServer/91",
+        "source": "portland_count",
+        "chart_types": ["stat"],
+        "title": "Publicly Owned Vacant Parcels",
+        "description": "Count of Portland parcels owned by public entities classified as vacant land. Direct measure of publicly held vacant property.",
+        "topics": ["vacant", "land", "parcels", "downtown", "public", "property", "development", "vacancy", "empty"],
+        "where": "PRPCD_DESC='VACANT LAND'",
+        "label": "vacant parcels",
+    },
+    {
+        "id": "COP_OpenData_Property/MapServer/91:all",
+        "source": "portland_count",
+        "chart_types": ["stat"],
+        "title": "Total Publicly Owned Parcels",
+        "description": "Total count of all parcels owned by public entities in Portland (city, county, state, federal).",
+        "topics": ["public", "property", "land", "parcels", "government"],
+        "where": "1=1",
+        "arcgis_id": "COP_OpenData_Property/MapServer/91",
+        "label": "public parcels",
     },
 ]
 
@@ -86,4 +162,15 @@ CATALOG_YEAR_FIELD: dict[str, str] = {
     e["id"]: e.get("year_field", "YEAR_")
     for e in CATALOG
     if e["source"] == "portland"
+}
+
+# Extra params for portland_count queries
+CATALOG_COUNT_CONFIG: dict[str, dict] = {
+    e["id"]: {
+        "where": e.get("where", "1=1"),
+        "arcgis_id": e.get("arcgis_id", e["id"]),
+        "label": e.get("label", "records"),
+    }
+    for e in CATALOG
+    if e["source"] == "portland_count"
 }

@@ -94,6 +94,14 @@
   color: #475569;
 }
 
+.widget-source {
+  padding: 4px 12px 8px;
+  font-size: 10px;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .widget-table {
   height: 100%;
   display: flex;

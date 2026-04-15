@@ -5,12 +5,13 @@ import subprocess
 import urllib.parse
 import httpx
 from datetime import datetime, timezone
+from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from catalog import CATALOG_TEXT, CATALOG_YEAR_FIELD
+from catalog import CATALOG_TEXT, CATALOG_YEAR_FIELD, CATALOG_COUNT_CONFIG
 
 load_dotenv()
 
@@ -25,26 +26,29 @@ app.add_middleware(
 
 BLS_BASE = "https://api.bls.gov/publicAPI/v1/timeseries/data"
 PORTLAND_BASE = "https://www.portlandmaps.com/od/rest/services"
+WORLDBANK_BASE = "https://api.worldbank.org/v2/country/US/indicator"
+DASHBOARD_FILE = Path(__file__).parent / "dashboard.json"
 
 SYSTEM_PROMPT = f"""You are a civic data assistant for a Portland, Oregon policy dashboard.
 
-Given a user question, select the most relevant datasets from the catalog and return a JSON object with two keys:
+Given a user question, select the most relevant datasets from the catalog and return a JSON object:
 
-1. "reasoning": 2-3 sentences explaining which metrics you chose and why they're the most meaningful signal for this question. Be specific about what each metric reveals.
-2. "widgets": array of 2-4 widget config objects.
-
-Each widget object:
 {{
-  "title": "Short widget title",
-  "type": "line" | "bar" | "stat",
-  "source": "bls" | "portland",
-  "series_id": "<BLS series id if source=bls, else null>",
-  "dataset_id": "<ArcGIS service path if source=portland, e.g. COP_OpenData_PlanningDevelopment/MapServer/89, else null>",
-  "description": "One sentence on what this specific chart reveals about the question"
+  "reasoning": "2-3 sentences explaining which metrics you chose and why they're the most meaningful signal for this question. Be specific about what each metric reveals.",
+  "widgets": [
+    {{
+      "title": "Short widget title",
+      "type": "line" | "bar" | "stat",
+      "source": "bls" | "worldbank" | "portland" | "portland_count",
+      "series_id": "<id from catalog if source=bls or worldbank, else null>",
+      "dataset_id": "<id from catalog if source=portland or portland_count, else null>",
+      "description": "One sentence on what this chart reveals about the question"
+    }}
+  ]
 }}
 
-Return ONLY a raw JSON object, no markdown, no extra text.
-Choose "stat" for a single current-value callout, "line" for trends over time, "bar" for discrete yearly comparisons.
+Return ONLY a raw JSON object, no markdown, no extra text. Choose 2-4 widgets that together tell a complete data story.
+"stat" = single current value, "line" = trend over time, "bar" = discrete yearly comparison.
 
 AVAILABLE DATA CATALOG:
 {CATALOG_TEXT}
@@ -59,8 +63,8 @@ class WidgetConfig(BaseModel):
     title: str
     type: str
     source: str
-    series_id: str | None
-    dataset_id: str | None
+    series_id: str | None = None
+    dataset_id: str | None = None
     description: str
     year_field: str | None = "YEAR_"
 
@@ -68,6 +72,10 @@ class WidgetConfig(BaseModel):
 class QueryResponse(BaseModel):
     reasoning: str
     widgets: list[WidgetConfig]
+
+
+class DashboardSave(BaseModel):
+    sections: list[dict]
 
 
 def parse_claude_json(raw: str) -> dict:
@@ -82,18 +90,15 @@ def query(req: QueryRequest):
     full_prompt = f"{SYSTEM_PROMPT}\n\nUser question: {req.prompt}"
     result = subprocess.run(
         ["claude", "-p", full_prompt],
-        capture_output=True,
-        text=True,
-        timeout=60,
+        capture_output=True, text=True, timeout=60,
     )
     if result.returncode != 0:
         raise HTTPException(status_code=500, detail=f"claude CLI error: {result.stderr}")
     try:
         parsed = parse_claude_json(result.stdout)
-        # If Claude returned a bare list instead of {reasoning, widgets}, wrap it
         if isinstance(parsed, list):
             parsed = {"reasoning": "", "widgets": parsed}
-        # Enforce year_field from catalog — never trust Claude's value for this
+        # Enforce year_field from catalog for portland datasets
         for w in parsed.get("widgets", []):
             if w.get("source") == "portland" and w.get("dataset_id"):
                 w["year_field"] = CATALOG_YEAR_FIELD.get(w["dataset_id"], "YEAR_")
@@ -101,6 +106,23 @@ def query(req: QueryRequest):
     except Exception:
         raise HTTPException(status_code=500, detail=f"Could not parse claude response: {result.stdout}")
 
+
+# ── Dashboard save/load ────────────────────────────────────────────────────────
+
+@app.get("/dashboard")
+def load_dashboard():
+    if DASHBOARD_FILE.exists():
+        return json.loads(DASHBOARD_FILE.read_text())
+    return {"sections": []}
+
+
+@app.post("/dashboard")
+def save_dashboard(body: DashboardSave):
+    DASHBOARD_FILE.write_text(json.dumps({"sections": body.sections}, indent=2))
+    return {"ok": True}
+
+
+# ── Data endpoints ─────────────────────────────────────────────────────────────
 
 @app.get("/data/bls/{series_id}")
 async def bls_data(series_id: str):
@@ -115,8 +137,7 @@ async def bls_data(series_id: str):
     series_data = payload["Results"]["series"][0]["data"]
     data = []
     for obs in reversed(series_data):
-        period = obs["period"]
-        year = obs["year"]
+        period, year = obs["period"], obs["year"]
         if period.startswith("M"):
             date = f"{year}-{period[1:]}-01"
         elif period.startswith("Q"):
@@ -131,12 +152,30 @@ async def bls_data(series_id: str):
     return {"data": data}
 
 
-TIMESTAMP_FIELDS = {"ISSUED", "CREATEDATE", "INDATE"}
+@app.get("/data/worldbank/{indicator}")
+async def worldbank_data(indicator: str):
+    url = f"{WORLDBANK_BASE}/{indicator}?format=json&mrv=25"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, timeout=15)
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail="World Bank API error")
+    payload = resp.json()
+    if not isinstance(payload, list) or len(payload) < 2:
+        raise HTTPException(status_code=400, detail="Unexpected World Bank response")
+    data = [
+        {"date": f"{obs['date']}-01-01", "value": obs["value"]}
+        for obs in reversed(payload[1])
+        if obs.get("value") is not None
+    ]
+    return {"data": data}
+
+
+TIMESTAMP_FIELDS = {"ISSUED", "CREATEDATE", "INDATE", "Est_Construction_Start_Date", "Estimated_Design_Start_Date"}
 
 
 @app.get("/data/portland/{service_path:path}")
 async def portland_data(service_path: str, year_field: str = "YEAR_", since_year: int = 2005):
-    """Return permit/record counts aggregated by year from a Portland ArcGIS layer."""
+    """Return counts aggregated by year from a Portland ArcGIS layer."""
     if year_field in TIMESTAMP_FIELDS:
         where = urllib.parse.quote(f"{year_field} >= DATE '{since_year}-01-01'")
         counts: dict[int, int] = {}
@@ -145,11 +184,10 @@ async def portland_data(service_path: str, year_field: str = "YEAR_", since_year
             while True:
                 url = (
                     f"{PORTLAND_BASE}/{service_path}/query"
-                    f"?where={where}"
-                    f"&outFields={year_field}"
+                    f"?where={where}&outFields={year_field}"
                     f"&resultRecordCount=200&resultOffset={offset}&f=json"
                 )
-                resp = await client.get(url, timeout=15)
+                resp = await client.get(url, timeout=20)
                 if resp.status_code != 200:
                     raise HTTPException(status_code=resp.status_code, detail="Portland ArcGIS error")
                 payload = resp.json()
@@ -185,5 +223,25 @@ async def portland_data(service_path: str, year_field: str = "YEAR_", since_year
             {"date": f"{f['attributes'][year_field]}-01-01", "value": f["attributes"]["count"]}
             for f in payload.get("features", [])
         ]
-
     return {"data": data}
+
+
+@app.get("/data/portland_count/{dataset_id:path}")
+async def portland_count(dataset_id: str):
+    """Return a single count stat from a Portland ArcGIS layer using catalog config."""
+    config = CATALOG_COUNT_CONFIG.get(dataset_id)
+    if not config:
+        raise HTTPException(status_code=404, detail=f"Unknown dataset_id: {dataset_id}")
+    arcgis_id = config["arcgis_id"]
+    where = urllib.parse.quote(config["where"])
+    url = f"{PORTLAND_BASE}/{arcgis_id}/query?where={where}&returnCountOnly=true&f=json"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, timeout=15)
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail="Portland ArcGIS error")
+    payload = resp.json()
+    if "error" in payload:
+        raise HTTPException(status_code=400, detail=str(payload["error"]))
+    count = payload.get("count", 0)
+    year = datetime.now(tz=timezone.utc).year
+    return {"data": [{"date": f"{year}-01-01", "value": count}], "label": config["label"]}
