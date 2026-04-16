@@ -67,14 +67,22 @@ export default function App() {
     });
   };
 
-  // Self-heal: called when a widget's data fetch fails
+  // Self-heal: called when a widget's data fetch fails (max 2 attempts)
   const healWidget = async (tabId, widgetId, config, errorMsg) => {
-    // Mark as healing so widget shows spinner
+    if ((config._healAttempts ?? 0) >= 2) {
+      removeWidget(tabId, widgetId);
+      return;
+    }
     updateWidget(tabId, widgetId, { _healing: true, _error: null });
     try {
       const { data } = await axios.post(`${API}/heal`, { config, error: errorMsg });
       if (data.fixed_config) {
-        updateWidget(tabId, widgetId, { ...data.fixed_config, _healing: false, _error: null });
+        updateWidget(tabId, widgetId, {
+          ...data.fixed_config,
+          _healing: false,
+          _error: null,
+          _healAttempts: (config._healAttempts ?? 0) + 1,
+        });
       } else {
         removeWidget(tabId, widgetId);
       }
