@@ -8,6 +8,12 @@ import "./Widget.css";
 
 const API = "/api";
 
+const TIME_RANGES = [
+  { label: "5Y", years: 5 },
+  { label: "10Y", years: 10 },
+  { label: "All", years: null },
+];
+
 function fetchData(config) {
   const { source, series_id, dataset_id, year_field } = config;
   if (source === "bls" && series_id)
@@ -23,11 +29,19 @@ function fetchData(config) {
   return null;
 }
 
-export default function Widget({ config, onRemove }) {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
+function filterByRange(data, years) {
+  if (!years || !data?.length) return data;
+  const cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - years);
+  return data.filter((d) => new Date(d.date) >= cutoff);
+}
+
+export default function Widget({ config, onRemove, onError }) {
+  const [rawData, setRawData] = useState(null);
+  const [range, setRange] = useState("All");
   const bodyRef = useRef(null);
   const [bodyH, setBodyH] = useState(0);
+  const calledOnError = useRef(false);
 
   useEffect(() => {
     if (!bodyRef.current) return;
@@ -40,15 +54,40 @@ export default function Widget({ config, onRemove }) {
   }, []);
 
   useEffect(() => {
+    if (config._healing) return;       // App is healing — don't refetch
+    calledOnError.current = false;
+    setRawData(null);
     const req = fetchData(config);
     if (!req) return;
-    req.then((r) => setData(r.data.data)).catch(() => setError("Failed to load data"));
-  }, [config.source, config.series_id, config.dataset_id, config.year_field]);
+    req
+      .then((r) => {
+        const d = r.data.data;
+        if (!d || d.length === 0) throw new Error("empty response");
+        setRawData(d);
+      })
+      .catch((err) => {
+        const msg = err.response?.data?.detail || err.message || "fetch failed";
+        if (!calledOnError.current) {
+          calledOnError.current = true;
+          onError?.(msg);
+        }
+      });
+  }, [config.source, config.series_id, config.dataset_id, config.year_field, config._healing]);
+
+  if (config._healing) {
+    return (
+      <div className="widget widget-healing">
+        <div className="healing-msg">Fixing...</div>
+      </div>
+    );
+  }
+
+  const selectedYears = TIME_RANGES.find((r) => r.label === range)?.years ?? null;
+  const data = filterByRange(rawData, selectedYears);
 
   const renderChart = () => {
-    if (error) return <div className="widget-error">{error}</div>;
-    if (!data || bodyH === 0) return <div className="widget-loading">Loading...</div>;
-    if (data.length === 0) return <div className="widget-error">No data</div>;
+    if (!rawData) return <div className="widget-loading">Loading...</div>;
+    if (!data || data.length === 0) return <div className="widget-loading">Loading...</div>;
 
     if (config.type === "stat") {
       const latest = data[data.length - 1];
@@ -73,7 +112,6 @@ export default function Widget({ config, onRemove }) {
     };
 
     const commonProps = { data, margin: { top: 4, right: 8, left: -16, bottom: 0 } };
-
     const xAxis = (
       <XAxis dataKey="date" tickFormatter={(d) => new Date(d).getFullYear()}
         tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false}
@@ -115,17 +153,31 @@ export default function Widget({ config, onRemove }) {
   };
 
   const sourceLabel = {
-    bls: "BLS",
-    worldbank: "World Bank",
-    portland: "Portland ArcGIS",
-    portland_count: "Portland ArcGIS",
+    bls: "BLS", worldbank: "World Bank",
+    portland: "Portland ArcGIS", portland_count: "Portland ArcGIS",
   }[config.source] || config.source;
+
+  // Only show range controls for time-series sources with enough data
+  const showRangeControls = config.type !== "stat" && rawData && rawData.length > 6;
 
   return (
     <div className="widget">
       <div className="widget-header">
         <div className="widget-title">{config.title}</div>
-        <button className="widget-remove" onClick={onRemove}>✕</button>
+        <div className="widget-header-right">
+          {showRangeControls && (
+            <div className="range-btns">
+              {TIME_RANGES.map((r) => (
+                <button
+                  key={r.label}
+                  className={`range-btn ${range === r.label ? "range-active" : ""}`}
+                  onClick={() => setRange(r.label)}
+                >{r.label}</button>
+              ))}
+            </div>
+          )}
+          <button className="widget-remove" onClick={onRemove}>✕</button>
+        </div>
       </div>
       {config.description && (
         <div className="widget-description">{config.description}</div>

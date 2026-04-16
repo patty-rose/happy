@@ -94,6 +94,46 @@
   color: #475569;
 }
 
+.widget-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.range-btns {
+  display: flex;
+  gap: 2px;
+}
+
+.range-btn {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #2e3347;
+  background: none;
+  color: #475569;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.range-btn:hover { color: #94a3b8; border-color: #475569; }
+.range-active { color: #a78bfa; border-color: #7c3aed; background: rgba(124,58,237,0.1); }
+
+.widget-healing {
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+}
+
+.healing-msg {
+  font-size: 13px;
+  color: #7c3aed;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
 .widget-source {
   padding: 4px 12px 8px;
   font-size: 10px;

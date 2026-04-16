@@ -78,6 +78,11 @@ class DashboardSave(BaseModel):
     sections: list[dict]
 
 
+class HealRequest(BaseModel):
+    config: dict
+    error: str
+
+
 def parse_claude_json(raw: str) -> dict:
     text = raw.strip()
     text = re.sub(r"^```[a-z]*\n?", "", text)
@@ -114,6 +119,46 @@ def load_dashboard():
     if DASHBOARD_FILE.exists():
         return json.loads(DASHBOARD_FILE.read_text())
     return {"sections": []}
+
+
+@app.post("/heal")
+def heal_widget(body: HealRequest):
+    """Claude diagnoses a failed widget and returns a corrected config or null."""
+    prompt = f"""A data widget on a Portland policy dashboard failed to load.
+Diagnose the issue using the catalog below and return a corrected widget config, or null if unfixable.
+
+Failed config:
+{json.dumps(body.config, indent=2)}
+
+Error message:
+{body.error}
+
+AVAILABLE DATA CATALOG:
+{CATALOG_TEXT}
+
+Return ONLY raw JSON (no markdown):
+{{"fixed_config": {{...corrected widget object...}}}}
+OR if unfixable:
+{{"fixed_config": null}}
+
+The widget object must have: title, type, source, series_id, dataset_id, description.
+Only use IDs that exist in the catalog above.
+"""
+    result = subprocess.run(
+        ["claude", "-p", prompt],
+        capture_output=True, text=True, timeout=30,
+    )
+    if result.returncode != 0:
+        return {"fixed_config": None}
+    try:
+        parsed = parse_claude_json(result.stdout)
+        fc = parsed.get("fixed_config")
+        # Enforce year_field from catalog if it's a portland dataset
+        if fc and fc.get("source") == "portland" and fc.get("dataset_id"):
+            fc["year_field"] = CATALOG_YEAR_FIELD.get(fc["dataset_id"], "YEAR_")
+        return {"fixed_config": fc}
+    except Exception:
+        return {"fixed_config": None}
 
 
 @app.post("/dashboard")

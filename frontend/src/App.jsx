@@ -1,54 +1,104 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import PromptBar from "./components/PromptBar";
 import Widget from "./components/Widget";
 import "./App.css";
 
 const API = "/api";
+const MAX_VISIBLE_TABS = 4;
 
 export default function App() {
-  const [sections, setSections] = useState([]);
+  const [tabs, setTabs] = useState([]);          // [{id, query, reasoning, widgets}]
+  const [activeId, setActiveId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target))
+        setDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   // Load saved dashboard on mount
   useEffect(() => {
     axios.get(`${API}/dashboard`).then(({ data }) => {
-      if (data.sections?.length) setSections(data.sections);
+      if (data.sections?.length) {
+        setTabs(data.sections);
+        setActiveId(data.sections[0].id);
+      }
     }).catch(() => {});
   }, []);
 
-  const addSection = ({ query, reasoning, widgets }) => {
-    const id = `section-${Date.now()}`;
-    setSections((prev) => [...prev, { id, query, reasoning, widgets }]);
+  const addTab = ({ query, reasoning, widgets }) => {
+    const id = `tab-${Date.now()}`;
+    const tab = { id, query, reasoning, widgets };
+    setTabs((prev) => [...prev, tab]);
+    setActiveId(id);
   };
 
-  const removeWidget = (sectionId, widgetId) => {
-    setSections((prev) =>
-      prev
-        .map((s) => s.id === sectionId
-          ? { ...s, widgets: s.widgets.filter((w) => w.id !== widgetId) }
-          : s)
-        .filter((s) => s.widgets.length > 0)
-    );
+  // Update a single widget inside a tab (used by heal)
+  const updateWidget = (tabId, widgetId, newConfig) => {
+    setTabs((prev) => prev.map((t) =>
+      t.id !== tabId ? t : {
+        ...t,
+        widgets: t.widgets.map((w) => w.id === widgetId ? { ...w, ...newConfig } : w),
+      }
+    ));
   };
 
-  const clearAll = () => setSections([]);
+  const removeWidget = (tabId, widgetId) => {
+    setTabs((prev) => prev.map((t) =>
+      t.id !== tabId ? t : { ...t, widgets: t.widgets.filter((w) => w.id !== widgetId) }
+    ));
+  };
+
+  const removeTab = (tabId) => {
+    setTabs((prev) => {
+      const next = prev.filter((t) => t.id !== tabId);
+      if (activeId === tabId) setActiveId(next[next.length - 1]?.id ?? null);
+      return next;
+    });
+  };
+
+  // Self-heal: called when a widget's data fetch fails
+  const healWidget = async (tabId, widgetId, config, errorMsg) => {
+    // Mark as healing so widget shows spinner
+    updateWidget(tabId, widgetId, { _healing: true, _error: null });
+    try {
+      const { data } = await axios.post(`${API}/heal`, { config, error: errorMsg });
+      if (data.fixed_config) {
+        updateWidget(tabId, widgetId, { ...data.fixed_config, _healing: false, _error: null });
+      } else {
+        removeWidget(tabId, widgetId);
+      }
+    } catch {
+      removeWidget(tabId, widgetId);
+    }
+  };
 
   const saveDashboard = async () => {
     setSaving(true);
-    setSaveMsg(null);
     try {
-      await axios.post(`${API}/dashboard`, { sections });
+      await axios.post(`${API}/dashboard`, { sections: tabs });
       setSaveMsg("Saved");
     } catch {
-      setSaveMsg("Save failed");
+      setSaveMsg("Error");
     } finally {
       setSaving(false);
       setTimeout(() => setSaveMsg(null), 2500);
     }
   };
+
+  const activeTab = tabs.find((t) => t.id === activeId);
+  const visibleTabs = tabs.slice(0, MAX_VISIBLE_TABS);
+  const overflowTabs = tabs.slice(MAX_VISIBLE_TABS);
 
   return (
     <div className="app">
@@ -56,20 +106,51 @@ export default function App() {
         <div className="logo">happy</div>
         <div className="subtitle">Portland Policy Dashboard</div>
         <div className="header-actions">
-          {sections.length > 0 && (
-            <>
-              <button className="action-btn secondary" onClick={clearAll}>Clear</button>
-              <button className="action-btn primary" onClick={saveDashboard} disabled={saving}>
-                {saving ? "Saving..." : saveMsg || "Save dashboard"}
-              </button>
-            </>
+          {tabs.length > 0 && (
+            <button className="action-btn primary" onClick={saveDashboard} disabled={saving}>
+              {saving ? "Saving..." : saveMsg || "Save"}
+            </button>
           )}
         </div>
       </header>
 
-      <PromptBar onAdd={addSection} setLoading={setLoading} loading={loading} />
+      <PromptBar onAdd={addTab} setLoading={setLoading} loading={loading} />
 
-      {sections.length === 0 && !loading && (
+      {/* Tab bar */}
+      {tabs.length > 0 && (
+        <div className="tab-bar">
+          {visibleTabs.map((t) => (
+            <button
+              key={t.id}
+              className={`tab ${t.id === activeId ? "tab-active" : ""}`}
+              onClick={() => setActiveId(t.id)}
+            >
+              <span className="tab-label">{t.query.length > 32 ? t.query.slice(0, 30) + "…" : t.query}</span>
+              <span className="tab-close" onClick={(e) => { e.stopPropagation(); removeTab(t.id); }}>×</span>
+            </button>
+          ))}
+          {overflowTabs.length > 0 && (
+            <div className="tab-overflow" ref={dropdownRef}>
+              <button className="tab tab-more" onClick={() => setDropdownOpen((v) => !v)}>
+                +{overflowTabs.length} more ▾
+              </button>
+              {dropdownOpen && (
+                <div className="tab-dropdown">
+                  {overflowTabs.map((t) => (
+                    <button key={t.id} className="tab-dropdown-item"
+                      onClick={() => { setActiveId(t.id); setDropdownOpen(false); }}>
+                      {t.query.length > 48 ? t.query.slice(0, 46) + "…" : t.query}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Active tab content */}
+      {tabs.length === 0 && !loading && (
         <div className="empty-state">
           <p>Ask about any Portland policy topic and get a curated set of relevant data.<br />
             <em>"Show me data about vacant spaces in downtown Portland"</em>
@@ -79,27 +160,26 @@ export default function App() {
 
       {loading && <div className="loading-bar">Selecting relevant datasets...</div>}
 
-      <div className="sections">
-        {sections.map((section) => (
-          <div key={section.id} className="section">
-            <div className="section-header">
-              <div className="section-query">"{section.query}"</div>
-              {section.reasoning && (
-                <div className="section-reasoning">{section.reasoning}</div>
-              )}
+      {activeTab && (
+        <div className="tab-content">
+          {activeTab.reasoning && (
+            <div className="tab-reasoning">
+              <span className="reasoning-label">Why these metrics</span>
+              {activeTab.reasoning}
             </div>
-            <div className="widget-grid">
-              {section.widgets.map((w) => (
-                <Widget
-                  key={w.id}
-                  config={w}
-                  onRemove={() => removeWidget(section.id, w.id)}
-                />
-              ))}
-            </div>
+          )}
+          <div className="widget-grid">
+            {activeTab.widgets.map((w) => (
+              <Widget
+                key={w.id}
+                config={w}
+                onRemove={() => removeWidget(activeTab.id, w.id)}
+                onError={(msg) => healWidget(activeTab.id, w.id, w, msg)}
+              />
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

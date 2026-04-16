@@ -10,7 +10,7 @@ test('app loads without console errors', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('query returns reasoning blurb and multiple widgets', async ({ page }) => {
+test('query returns tab with reasoning and multiple widgets', async ({ page }) => {
   const errors = [];
   page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
   page.on('pageerror', err => errors.push(err.message));
@@ -19,15 +19,15 @@ test('query returns reasoning blurb and multiple widgets', async ({ page }) => {
   await page.fill('.prompt-input', 'Show me data about vacant spaces in downtown Portland');
   await page.click('.prompt-btn');
 
-  await expect(page.locator('.section')).toBeVisible({ timeout: 45000 });
-  await expect(page.locator('.section-reasoning')).not.toBeEmpty();
+  await expect(page.locator('.tab-content')).toBeVisible({ timeout: 45000 });
+  await expect(page.locator('.tab-reasoning')).not.toBeEmpty();
 
   const count = await page.locator('.widget').count();
   expect(count).toBeGreaterThanOrEqual(2);
   expect(errors).toEqual([]);
 });
 
-test('save dashboard button appears after query and shows confirmation', async ({ page }) => {
+test('save button appears after query and shows confirmation', async ({ page }) => {
   const errors = [];
   page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
   page.on('pageerror', err => errors.push(err.message));
@@ -36,10 +36,10 @@ test('save dashboard button appears after query and shows confirmation', async (
   await page.fill('.prompt-input', 'Portland unemployment trends');
   await page.click('.prompt-btn');
 
-  await expect(page.locator('.section')).toBeVisible({ timeout: 45000 });
-  await expect(page.locator('button:has-text("Save dashboard")')).toBeVisible();
+  await expect(page.locator('.tab-content')).toBeVisible({ timeout: 45000 });
+  await expect(page.locator('button:has-text("Save")')).toBeVisible();
 
-  await page.click('button:has-text("Save dashboard")');
+  await page.click('button:has-text("Save")');
   await expect(page.locator('button:has-text("Saved")')).toBeVisible({ timeout: 5000 });
 
   expect(errors).toEqual([]);
