@@ -122,11 +122,35 @@ def load_dashboard():
     return {"sections": []}
 
 
+HEAL_SOURCE_RULES = """
+SOURCE TYPES AND EXACT FIELD RULES:
+- "bls":           use series_id (exact BLS series code), dataset_id must be null
+- "worldbank":     use series_id (exact World Bank indicator code), dataset_id must be null
+- "portland":      use dataset_id (exact ArcGIS path), series_id must be null
+- "portland_count": use dataset_id (exact ArcGIS path), series_id must be null
+- "openmeteo":     use series_id, must be one of: portland_temp, portland_precip, portland_wind. dataset_id must be null
+- "usgs_water":    use series_id in format "{site}-{param}", e.g. "14211720-00060". dataset_id must be null
+- "usgs_quake":    use dataset_id, must be exactly: pnw. series_id must be null
+- "usaspending":   use dataset_id, must be a 2-letter US state code e.g. "OR". series_id must be null
+
+WIDGET TYPE RULES:
+- "stat":  single latest value display — only use for sources with very few data points or count sources
+- "line":  time-series line chart
+- "bar":   time-series bar chart
+
+COMMON MISTAKES TO AVOID:
+- Never invent a series_id or dataset_id not listed in the catalog
+- For usgs_water, the format is "{site_number}-{parameter_code}" with a hyphen, not a slash
+- For openmeteo, series_id must be exactly one of the three listed values
+- For usgs_quake and usaspending, always use dataset_id not series_id
+"""
+
+
 @app.post("/heal")
 def heal_widget(body: HealRequest):
     """Claude diagnoses a failed widget and returns a corrected config or null."""
     prompt = f"""A data widget on a Portland policy dashboard failed to load.
-Diagnose the issue using the catalog below and return a corrected widget config, or null if unfixable.
+Diagnose the issue and return a corrected widget config, or null if unfixable.
 
 Failed config:
 {json.dumps(body.config, indent=2)}
@@ -134,7 +158,9 @@ Failed config:
 Error message:
 {body.error}
 
-AVAILABLE DATA CATALOG:
+{HEAL_SOURCE_RULES}
+
+AVAILABLE DATA CATALOG (only use IDs from this list):
 {CATALOG_TEXT}
 
 Return ONLY raw JSON (no markdown):
@@ -142,19 +168,20 @@ Return ONLY raw JSON (no markdown):
 OR if unfixable:
 {{"fixed_config": null}}
 
-The widget object must have: title, type, source, series_id, dataset_id, description.
-Only use IDs that exist in the catalog above.
+Required fields: title, type, source, series_id (or null), dataset_id (or null), description.
 """
-    result = subprocess.run(
-        ["claude", "-p", prompt],
-        capture_output=True, text=True, timeout=30,
-    )
+    try:
+        result = subprocess.run(
+            ["claude", "-p", prompt],
+            capture_output=True, text=True, timeout=45,
+        )
+    except subprocess.TimeoutExpired:
+        return {"fixed_config": None}
     if result.returncode != 0:
         return {"fixed_config": None}
     try:
         parsed = parse_claude_json(result.stdout)
         fc = parsed.get("fixed_config")
-        # Enforce year_field from catalog if it's a portland dataset
         if fc and fc.get("source") == "portland" and fc.get("dataset_id"):
             fc["year_field"] = CATALOG_YEAR_FIELD.get(fc["dataset_id"], "YEAR_")
         return {"fixed_config": fc}

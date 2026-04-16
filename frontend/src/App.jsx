@@ -75,7 +75,7 @@ export default function App() {
     }
     updateWidget(tabId, widgetId, { _healing: true, _error: null });
     try {
-      const { data } = await axios.post(`${API}/heal`, { config, error: errorMsg });
+      const { data } = await axios.post(`${API}/heal`, { config, error: errorMsg }, { timeout: 60000 });
       if (data.fixed_config) {
         updateWidget(tabId, widgetId, {
           ...data.fixed_config,
