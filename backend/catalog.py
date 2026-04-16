@@ -1,8 +1,12 @@
 # Data catalog — describes every available series/dataset.
-# source: "bls"       → /data/bls/{id}
-# source: "worldbank" → /data/worldbank/{id}
-# source: "portland"  → /data/portland/{id}  (year-aggregated ArcGIS)
+# source: "bls"          → /data/bls/{id}
+# source: "worldbank"    → /data/worldbank/{id}
+# source: "portland"     → /data/portland/{id}  (year-aggregated ArcGIS)
 # source: "portland_count" → /data/portland_count/{id}  (static count stat)
+# source: "openmeteo"    → /data/openmeteo/{id}  (Portland weather, no key)
+# source: "usgs_water"   → /data/usgs_water/{id}  (USGS streamflow, no key)
+# source: "usgs_quake"   → /data/usgs_quake/{id}  (earthquake counts, no key)
+# source: "usaspending"  → /data/usaspending/{id}  (federal spending, no key)
 
 CATALOG = [
     # ── BLS Labor Data (Oregon / Portland-Metro) ──────────────────────────────
@@ -149,6 +153,70 @@ CATALOG = [
         "arcgis_id": "COP_OpenData_Property/MapServer/91",
         "label": "public parcels",
     },
+
+    # ── Open-Meteo (Portland weather history, no API key) ─────────────────────
+    {
+        "id": "portland_temp",
+        "source": "openmeteo",
+        "chart_types": ["line"],
+        "title": "Portland Annual Mean Temperature",
+        "description": "Annual mean temperature in Portland, OR (°C). Shows long-term climate trends and warming patterns.",
+        "topics": ["temperature", "climate", "weather", "environment", "warming", "heat"],
+    },
+    {
+        "id": "portland_precip",
+        "source": "openmeteo",
+        "chart_types": ["bar", "line"],
+        "title": "Portland Annual Precipitation",
+        "description": "Total annual precipitation in Portland, OR (mm). Tracks rainfall trends relevant to water supply and flood risk.",
+        "topics": ["precipitation", "rain", "rainfall", "climate", "weather", "water", "flood", "drought"],
+    },
+    {
+        "id": "portland_wind",
+        "source": "openmeteo",
+        "chart_types": ["line"],
+        "title": "Portland Annual Mean Wind Speed",
+        "description": "Annual mean wind speed in Portland, OR (m/s). Relevant to air quality dispersion and renewable energy context.",
+        "topics": ["wind", "weather", "climate", "air quality", "environment"],
+    },
+
+    # ── USGS Water Services (Willamette River, no API key) ────────────────────
+    {
+        "id": "14211720-00060",
+        "source": "usgs_water",
+        "chart_types": ["line", "bar"],
+        "title": "Willamette River Streamflow at Portland",
+        "description": "Annual mean streamflow of the Willamette River at Portland, OR (cubic feet per second). Reflects water supply, flood cycles, and upstream conditions.",
+        "topics": ["water", "river", "willamette", "streamflow", "flood", "environment", "climate", "infrastructure"],
+    },
+    {
+        "id": "14211720-00065",
+        "source": "usgs_water",
+        "chart_types": ["line"],
+        "title": "Willamette River Gage Height at Portland",
+        "description": "Annual mean gage height (feet) of the Willamette River at Portland. Indicates flood risk and water level trends.",
+        "topics": ["water", "river", "willamette", "flood", "gage", "environment", "infrastructure"],
+    },
+
+    # ── USGS Earthquake Hazards (Pacific Northwest, no API key) ───────────────
+    {
+        "id": "pnw",
+        "source": "usgs_quake",
+        "chart_types": ["bar"],
+        "title": "PNW Earthquake Activity (M2.5+, Annual Count)",
+        "description": "Annual count of magnitude 2.5+ earthquakes in the Portland/PNW region. Context for seismic risk and infrastructure resilience planning.",
+        "topics": ["earthquake", "seismic", "safety", "infrastructure", "resilience", "natural disaster", "risk"],
+    },
+
+    # ── USAspending.gov (federal spending, no API key) ────────────────────────
+    {
+        "id": "OR",
+        "source": "usaspending",
+        "chart_types": ["bar", "line"],
+        "title": "Federal Spending in Oregon (Annual)",
+        "description": "Total federal award spending (grants, contracts, loans, direct payments) in Oregon per fiscal year (billions USD).",
+        "topics": ["federal spending", "budget", "grants", "contracts", "economy", "investment", "government", "funding"],
+    },
 ]
 
 CATALOG_TEXT = "\n".join(
@@ -173,4 +241,11 @@ CATALOG_COUNT_CONFIG: dict[str, dict] = {
     }
     for e in CATALOG
     if e["source"] == "portland_count"
+}
+
+# Open-Meteo variable config: id → (api_variable, aggregation_method)
+OPENMETEO_CONFIG: dict[str, tuple[str, str]] = {
+    "portland_temp":   ("temperature_2m_mean", "mean"),
+    "portland_precip": ("precipitation_sum",   "sum"),
+    "portland_wind":   ("wind_speed_10m_max",  "mean"),
 }

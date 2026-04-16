@@ -11,7 +11,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from catalog import CATALOG_TEXT, CATALOG_YEAR_FIELD, CATALOG_COUNT_CONFIG
+import asyncio
+from catalog import CATALOG_TEXT, CATALOG_YEAR_FIELD, CATALOG_COUNT_CONFIG, OPENMETEO_CONFIG
 
 load_dotenv()
 
@@ -290,3 +291,144 @@ async def portland_count(dataset_id: str):
     count = payload.get("count", 0)
     year = datetime.now(tz=timezone.utc).year
     return {"data": [{"date": f"{year}-01-01", "value": count}], "label": config["label"]}
+
+
+# ── Open-Meteo (Portland weather history, no key) ─────────────────────────────
+
+OPENMETEO_BASE = "https://archive-api.open-meteo.com/v1/archive"
+PORTLAND_LAT, PORTLAND_LON = 45.5051, -122.6750
+
+
+@app.get("/data/openmeteo/{variable}")
+async def openmeteo_data(variable: str):
+    cfg = OPENMETEO_CONFIG.get(variable)
+    if not cfg:
+        raise HTTPException(status_code=404, detail=f"Unknown Open-Meteo variable: {variable}")
+    api_var, agg = cfg
+    url = (
+        f"{OPENMETEO_BASE}?latitude={PORTLAND_LAT}&longitude={PORTLAND_LON}"
+        f"&start_date=2000-01-01&end_date=2024-12-31"
+        f"&daily={api_var}&timezone=America%2FLos_Angeles"
+    )
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, timeout=30)
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail="Open-Meteo API error")
+    payload = resp.json()
+    times = payload["daily"]["time"]
+    values = payload["daily"][api_var]
+    yearly: dict[str, list[float]] = {}
+    for t, v in zip(times, values):
+        if v is None:
+            continue
+        yr = t[:4]
+        yearly.setdefault(yr, []).append(v)
+    if agg == "mean":
+        data = [{"date": f"{yr}-01-01", "value": round(sum(vs) / len(vs), 2)}
+                for yr, vs in sorted(yearly.items()) if vs]
+    else:
+        data = [{"date": f"{yr}-01-01", "value": round(sum(vs), 1)}
+                for yr, vs in sorted(yearly.items()) if vs]
+    return {"data": data}
+
+
+# ── USGS Water Services (streamflow, no key) ──────────────────────────────────
+
+USGS_WATER_BASE = "https://waterservices.usgs.gov/nwis/dv/"
+
+
+@app.get("/data/usgs_water/{series_id}")
+async def usgs_water_data(series_id: str):
+    """series_id format: {site_number}-{parameter_code}, e.g. 14211720-00060"""
+    if "-" not in series_id:
+        raise HTTPException(status_code=400, detail="series_id must be {site}-{param}")
+    site, param = series_id.rsplit("-", 1)
+    url = (
+        f"{USGS_WATER_BASE}?format=json&sites={site}&parameterCd={param}"
+        f"&startDT=2000-01-01&endDT=2024-12-31&statCd=00003"
+    )
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, timeout=20)
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail="USGS Water Services error")
+    payload = resp.json()
+    try:
+        ts = payload["value"]["timeSeries"][0]["values"][0]["value"]
+    except (KeyError, IndexError):
+        raise HTTPException(status_code=400, detail="Unexpected USGS response structure")
+    yearly: dict[str, list[float]] = {}
+    for obs in ts:
+        try:
+            v = float(obs["value"])
+            if v < 0:
+                continue
+            yr = obs["dateTime"][:4]
+            yearly.setdefault(yr, []).append(v)
+        except (ValueError, KeyError):
+            pass
+    data = [{"date": f"{yr}-01-01", "value": round(sum(vs) / len(vs), 1)}
+            for yr, vs in sorted(yearly.items()) if vs]
+    return {"data": data}
+
+
+# ── USGS Earthquake Hazards (annual counts, no key) ───────────────────────────
+
+USGS_QUAKE_BASE = "https://earthquake.usgs.gov/fdsnws/event/1/count"
+
+QUAKE_REGIONS = {
+    "pnw": {"minlatitude": 44.5, "maxlatitude": 47.0, "minlongitude": -124.5, "maxlongitude": -121.0},
+}
+
+
+@app.get("/data/usgs_quake/{region}")
+async def usgs_quake_data(region: str):
+    bounds = QUAKE_REGIONS.get(region)
+    if not bounds:
+        raise HTTPException(status_code=404, detail=f"Unknown region: {region}")
+
+    async def count_year(client: httpx.AsyncClient, year: int) -> tuple[int, int]:
+        params = {**bounds, "minmagnitude": "2.5",
+                  "starttime": f"{year}-01-01", "endtime": f"{year + 1}-01-01"}
+        try:
+            r = await client.get(USGS_QUAKE_BASE, params=params, timeout=15)
+            return year, int(r.text.strip()) if r.status_code == 200 else 0
+        except Exception:
+            return year, 0
+
+    async with httpx.AsyncClient() as client:
+        results = await asyncio.gather(*[count_year(client, y) for y in range(2000, 2025)])
+
+    data = [{"date": f"{yr}-01-01", "value": cnt} for yr, cnt in sorted(results)]
+    return {"data": data}
+
+
+# ── USAspending.gov (federal spending in Oregon, no key) ──────────────────────
+
+USASPENDING_BASE = "https://api.usaspending.gov/api/v2/search/spending_over_time/"
+
+
+@app.get("/data/usaspending/{state}")
+async def usaspending_data(state: str):
+    body = {
+        "group": "fiscal_year",
+        "filters": {
+            "recipient_locations": [{"country": "USA", "state": state.upper()}],
+            "time_period": [{"start_date": "2008-10-01", "end_date": "2024-09-30"}],
+        },
+        "subawards": False,
+    }
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(USASPENDING_BASE, json=body, timeout=30)
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail="USAspending API error")
+    payload = resp.json()
+    data = [
+        {
+            "date": f"{r['time_period']['fiscal_year']}-01-01",
+            "value": round(r["aggregated_amount"] / 1_000_000_000, 2),
+        }
+        for r in payload.get("results", [])
+        if r.get("aggregated_amount") is not None
+    ]
+    data.sort(key=lambda d: d["date"])
+    return {"data": data}

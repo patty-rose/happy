@@ -26,6 +26,14 @@ function fetchData(config) {
   }
   if (source === "portland_count" && dataset_id)
     return axios.get(`${API}/data/portland_count/${dataset_id}`);
+  if (source === "openmeteo" && series_id)
+    return axios.get(`${API}/data/openmeteo/${series_id}`);
+  if (source === "usgs_water" && series_id)
+    return axios.get(`${API}/data/usgs_water/${series_id}`);
+  if (source === "usgs_quake" && dataset_id)
+    return axios.get(`${API}/data/usgs_quake/${dataset_id}`);
+  if (source === "usaspending" && dataset_id)
+    return axios.get(`${API}/data/usaspending/${dataset_id}`);
   return null;
 }
 
@@ -155,6 +163,8 @@ export default function Widget({ config, onRemove, onError }) {
   const sourceLabel = {
     bls: "BLS", worldbank: "World Bank",
     portland: "Portland ArcGIS", portland_count: "Portland ArcGIS",
+    openmeteo: "Open-Meteo", usgs_water: "USGS Water",
+    usgs_quake: "USGS Earthquake", usaspending: "USAspending.gov",
   }[config.source] || config.source;
 
   // Only show range controls for time-series sources with enough data
